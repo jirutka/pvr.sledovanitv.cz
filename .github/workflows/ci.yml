@@ -1,0 +1,53 @@
+name: CI
+on:
+  - push
+  - pull_request
+
+env:
+  ADDON_NAME: pvr.sledovanitv.cz
+  KODI_BRANCH: Matrix
+
+jobs:
+  build:
+    name: Build addon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout addon repository
+        uses: actions/checkout@v3
+        with:
+          path: ${{ env.ADDON_NAME }}
+
+      - name: Checkout kodi repository
+        uses: actions/checkout@v3
+        with:
+          repository: xbmc/xbmc
+          ref: ${{ env.KODI_BRANCH }}
+          path: xbmc
+
+      - name: Configure addon
+        run: |
+          cmake -B build \
+            -DADDONS_DEFINITION_DIR="$PWD/xbmc/cmake/addons/addons" \
+            -DADDONS_TO_BUILD=${{ env.ADDON_NAME }} \
+            -DADDON_SRC_PREFIX="$PWD/.." \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=xbmc/addons \
+            -DPACKAGE_ZIP=1 \
+            ../xbmc/cmake/addons
+        working-directory: ${{ env.ADDON_NAME }}
+
+      - name: Build addon
+        run: make
+        working-directory: ${{ env.ADDON_NAME }}/build
+
+      - name: Package addon
+        run: |
+          make package-addons
+          mv ${{ env.ADDON_NAME }}-prefix/src/${{ env.ADDON_NAME }}-build/addon-*.zip .
+        working-directory: ${{ env.ADDON_NAME }}/build
+
+      # NOTE: upload-artifact still doesn't support symlinks, so we have to go with nested zips. :(
+      - name: Upload addon ZIP to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          path: ${{ env.ADDON_NAME }}/build/*.zip
